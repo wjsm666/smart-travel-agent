@@ -1,0 +1,33 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Frontend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local runtime data
+backend/data/trips.json
+backend/data/trips.json.*
+backend/data/runtime/
+*.log
+
+# Editors and office temporary files
+.idea/
+.vscode/
+~$*
+.DS_Store
+Thumbs.db

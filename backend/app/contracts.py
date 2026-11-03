@@ -12,6 +12,7 @@ from pydantic import (
     StrictBool,
     StrictInt,
     field_validator,
+    model_validator,
 )
 
 
@@ -35,7 +36,13 @@ class Attraction(ContractModel):
     name: NonEmptyStr
     category: Category
     description: NonEmptyStr
-    ticket_cny: Money
+    ticket_cny: Money | None
+    area: NonEmptyStr = "待补充"
+    duration_min: Annotated[StrictInt, Field(gt=0, le=480)] | None = None
+    source_url: str | None = None
+    ticket_source_url: str | None = None
+    ticket_checked_at: str | None = None
+    ticket_note: str | None = None
 
 
 class GenerationRequest(ContractModel):
@@ -54,6 +61,7 @@ class GenerationRequest(ContractModel):
 class CandidateDay(ContractModel):
     day: StrictInt
     attraction_ids: list[NonEmptyStr]
+    note: Annotated[str, Field(max_length=240)] | None = None
 
 
 class AgentCandidate(ContractModel):
@@ -68,24 +76,57 @@ class PlanDay(ContractModel):
     day: StrictInt
     attractions: list[Attraction]
     subtotal_cny: Money
+    note: Annotated[str, Field(max_length=240)] | None = None
+
+
+def _validate_ticket_summary(
+    days: list[PlanDay], total: int, budget: int, unknown: bool, over_budget: bool | None
+) -> None:
+    calculated_total = 0
+    calculated_unknown = False
+    for day in days:
+        known_prices = [item.ticket_cny for item in day.attractions if item.ticket_cny is not None]
+        if sum(known_prices) != day.subtotal_cny:
+            raise ValueError("daily ticket subtotal does not match known prices")
+        calculated_total += day.subtotal_cny
+        calculated_unknown |= any(item.ticket_cny is None for item in day.attractions)
+    expected_over = True if calculated_total > budget else None if calculated_unknown else False
+    if calculated_total != total or calculated_unknown != unknown or over_budget != expected_over:
+        raise ValueError("ticket budget summary is inconsistent")
 
 
 class PlanView(GenerationRequest):
     status: Literal["draft"] = "draft"
     days: list[PlanDay]
     total_cny: Money
-    over_budget: StrictBool
+    over_budget: StrictBool | None
+    has_unknown_prices: StrictBool = False
     warnings: list[str]
+
+    @model_validator(mode="after")
+    def check_ticket_summary(self):
+        _validate_ticket_summary(
+            self.days, self.total_cny, self.budget_cny, self.has_unknown_prices, self.over_budget
+        )
+        return self
 
 
 class SavedTrip(GenerationRequest):
     status: Literal["saved"] = "saved"
     days: list[PlanDay]
     total_cny: Money
-    over_budget: StrictBool
+    over_budget: StrictBool | None
+    has_unknown_prices: StrictBool = False
     warnings: list[str]
     trip_id: NonEmptyStr
     created_at: NonEmptyStr
+
+    @model_validator(mode="after")
+    def check_ticket_summary(self):
+        _validate_ticket_summary(
+            self.days, self.total_cny, self.budget_cny, self.has_unknown_prices, self.over_budget
+        )
+        return self
 
     @field_validator("trip_id")
     @classmethod

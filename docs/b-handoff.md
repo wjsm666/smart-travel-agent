@@ -3,7 +3,7 @@
 ## 已实现的部分
 
 - 后端 Python 3.13 / FastAPI 工程、依赖锁文件、公共 Pydantic 模型、配置、统一错误及健康检查。
-- 两个城市各六个虚构景点，`list_attractions`、`get_catalog` 和景点查询接口。
+- 汕头真实景点的人工参考资料，`list_attractions`、`get_catalog` 和景点查询接口；资料非实时、部分门票待确认。
 - 规划入口与单 Agent：一个只读查询工具，每次最多一次工具调用、两次模型调用；超时、非法输出和服务错误按契约返回。
 - 前端 `PlanningPanel.vue`：旅游需求、景点搜索和筛选、生成请求与结果事件。
 
@@ -15,6 +15,8 @@
 2. **前端**：初始化 Vue 工程，提供 `src/types/contracts.ts` 和 `src/api/client.ts`；公共客户端提供 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`。在 A 的 `App.vue` 中引入 B 的 `PlanningPanel.vue`，接收 `catalog-loaded`（完整景点数组）和 `plan-generated`（标准草案）事件，再传给 A 的行程组件。
 3. 后端代码合入并重启后，入口会注册 A 的行程路由。A 的两个服务未接入时，`POST /api/plans/generate` 返回 503 `SERVICE_NOT_READY`，这是当前集成状态，不是模拟成功。
 4. B 的隔离前端检查使用 Vue 3.5.44、Element Plus 2.14.7、Vite 8.3.5、`vue-tsc` 3.3.14、TypeScript 5.9.3。测试时 TypeScript 7.0.2 与该 `vue-tsc` 组合不兼容；A 应以自己实际初始化并锁定的版本再验证。
+
+**汕头方案的契约变更：** `Attraction.ticket_cny` 可以为 `null`，新增 `area`、`duration_min` 与资料来源；`CandidateDay` 和 `PlanDay` 新增可选 `note`；`PlanView`/`SavedTrip` 新增 `has_unknown_prices`，`over_budget` 可以为 `null`。A 需要在类型、校验、费用、显示和快照中处理这些字段；详见 [接口契约](api.md)。已知费用未超预算且有未知价格时，不能判定预算满足。每日景点安排也需检查 BR13 的时长与南澳区域规则。
 
 A 不需要为 B 再实现景点数据、公共 Pydantic 模型或 Agent。B 不在生产代码中提供 A 的行程服务替身，单元测试中的替身仅用于检查接口衔接。
 

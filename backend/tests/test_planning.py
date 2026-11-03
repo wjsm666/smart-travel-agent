@@ -30,7 +30,7 @@ class ScriptedModel(FakeMessagesListChatModel):
         return self._generate(messages, stop=stop, **kwargs)
 
 
-def model_call(city="厦门", call_id="tool-1"):
+def model_call(city="汕头", call_id="tool-1"):
     return {
         "name": "search_attractions",
         "args": {"city": city},
@@ -41,13 +41,15 @@ def model_call(city="厦门", call_id="tool-1"):
 
 def request(mode="agent"):
     return GenerationRequest(
-        city="厦门", day_count=1, preferences=["自然"], budget_cny=50, mode=mode
+        city="汕头", day_count=1, preferences=["自然"], budget_cny=50, mode=mode
     )
 
 
 def final_message(ids=None):
     return AIMessage(
-        content=json.dumps({"days": [{"day": 1, "attraction_ids": ids or ["xm-001"]}]})
+        content=json.dumps(
+            {"days": [{"day": 1, "attraction_ids": ids or ["st-001"], "note": "建议上午游览。"}]}
+        )
     )
 
 
@@ -75,16 +77,26 @@ def test_real_agent_loop_queries_tool_once_and_returns_candidate(configured, mon
     monkeypatch.setattr(agent, "list_attractions", record_query)
     use_model(monkeypatch, [AIMessage(content="", tool_calls=[model_call()]), final_message()])
     candidate = asyncio.run(agent.generate_candidate(request()))
-    assert candidate.days[0].attraction_ids == ["xm-001"]
-    assert calls == ["厦门"]
+    assert candidate.days[0].attraction_ids == ["st-001"]
+    assert candidate.days[0].note == "建议上午游览。"
+    assert calls == ["汕头"]
 
 
 @pytest.mark.parametrize(
     "responses",
     [
         [final_message()],
-        [AIMessage(content="", tool_calls=[model_call()]), final_message(["qz-001"])],
-        [AIMessage(content="", tool_calls=[model_call()]), final_message(["xm-001", "xm-001"])],
+        [AIMessage(content="", tool_calls=[model_call()]), final_message(["missing-001"])],
+        [AIMessage(content="", tool_calls=[model_call()]), final_message(["st-001", "st-001"])],
+        [AIMessage(content="", tool_calls=[model_call()]), final_message(["st-008", "st-001"])],
+        [
+            AIMessage(content="", tool_calls=[model_call()]),
+            AIMessage(content='{"days":[{"day":2,"attraction_ids":["st-001"],"note":"上午"}]}'),
+        ],
+        [
+            AIMessage(content="", tool_calls=[model_call()]),
+            AIMessage(content='{"days":[{"day":1,"attraction_ids":["st-001"]}]}'),
+        ],
         [AIMessage(content="", tool_calls=[model_call()]), AIMessage(content="not-json")],
         [AIMessage(content="", tool_calls=[model_call("泉州")]), final_message()],
     ],
@@ -181,11 +193,11 @@ def test_model_errors_are_sanitized(configured, monkeypatch):
 
 
 def sample_plan(draft):
-    attraction = get_catalog()["xm-001"]
+    attraction = get_catalog()["st-001"]
     return PlanView(
         **draft.model_dump(exclude={"days"}),
-        days=[PlanDay(day=1, attractions=[attraction], subtotal_cny=30)],
-        total_cny=30,
+        days=[PlanDay(day=1, attractions=[attraction], subtotal_cny=0)],
+        total_cny=0,
         over_budget=False,
         warnings=["费用仅包含示例景点门票。"],
     )
@@ -194,7 +206,7 @@ def sample_plan(draft):
 def test_rule_endpoint_uses_member_a_services_without_agent(monkeypatch):
     def make_rule_candidate(input_request):
         return PlanInput(
-            **input_request.model_dump(), days=[CandidateDay(day=1, attraction_ids=["xm-001"])]
+            **input_request.model_dump(), days=[CandidateDay(day=1, attraction_ids=["st-001"])]
         )
 
     monkeypatch.setattr(
@@ -207,7 +219,7 @@ def test_rule_endpoint_uses_member_a_services_without_agent(monkeypatch):
         response = client.post("/api/plans/generate", json=request("rules").model_dump())
     assert response.status_code == 200
     assert response.json()["mode"] == "rules"
-    assert response.json()["total_cny"] == 30
+    assert response.json()["total_cny"] == 0
 
 
 def test_missing_a_service_is_clear_and_invalid_input_is_422(monkeypatch):
@@ -228,7 +240,7 @@ def test_missing_a_service_is_clear_and_invalid_input_is_422(monkeypatch):
 
 def test_agent_candidate_business_failure_maps_to_invalid_output(monkeypatch):
     async def candidate(_request):
-        return agent.AgentCandidate(days=[CandidateDay(day=1, attraction_ids=["xm-001"])])
+        return agent.AgentCandidate(days=[CandidateDay(day=1, attraction_ids=["st-001"])])
 
     def reject(_draft):
         raise ValidationError("not valid")

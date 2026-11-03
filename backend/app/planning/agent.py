@@ -25,10 +25,14 @@ from app.errors import (
     AppError,
 )
 
-SYSTEM_PROMPT = """你是旅游行程规划助手。必须先调用一次 search_attractions 查询用户指定城市。
-只使用工具返回的景点 ID，按用户天数安排，每天最多两个，整份行程不得重复景点。
-不编造景点或价格。景点不足时允许部分日期为空。最终只输出 JSON 对象，格式为：
-{"days":[{"day":1,"attraction_ids":["景点ID"]}]}。每一天都必须出现，不要包含其他字段、代码块或解释。
+SYSTEM_PROMPT = """你是汕头旅游行程规划助手。必须先调用一次 search_attractions 查询汕头景点。
+只使用工具返回的景点 ID，按用户天数、偏好和门票预算安排，每天最多两个，整份行程不得重复景点。
+尽量将相近区域放在同一天，南澳岛不和其他区域安排在同一天，每天参考游览时长合计不超过 480 分钟。
+每天的 note 简要说明顺序、建议时段与安排理由；资料不足或预算可能不够应如实说明。
+参考价格可能未知，不要编造价格、实际开放时间、实时路况或精确交通时间。
+景点不足时允许部分日期为空。最终只输出 JSON 对象，格式为：
+{"days":[{"day":1,"attraction_ids":["景点ID"],"note":"建议上午游览，预留交通时间。"}]}。
+每一天都必须出现，不要包含其他字段或代码块。
 """
 
 
@@ -53,12 +57,12 @@ async def generate_candidate(request: GenerationRequest) -> AgentCandidate:
         raise
     except Exception as exc:
         raise AgentUnavailable() from exc
-    found_ids: set[str] = set()
+    found_catalog = {}
     call_count = 0
 
     @tool
     async def search_attractions(city: str) -> str:
-        """查询本次旅游目的地的全部示例景点，返回景点编号、类别和门票信息。"""
+        """查询汕头景点参考资料，包括区域、建议时长及已知的参考门票。"""
         nonlocal call_count
         call_count += 1
         if call_count > 1:
@@ -66,7 +70,7 @@ async def generate_candidate(request: GenerationRequest) -> AgentCandidate:
         if city.strip() != request.city:
             raise AgentInvalidOutput()
         items = list_attractions(city=request.city)
-        found_ids.update(item.id for item in items)
+        found_catalog.update({item.id: item for item in items})
         return json.dumps([item.model_dump() for item in items], ensure_ascii=False)
 
     agent = create_agent(
@@ -109,8 +113,22 @@ async def generate_candidate(request: GenerationRequest) -> AgentCandidate:
         raise AgentInvalidOutput() from exc
 
     used_ids = [attraction_id for day in candidate.days for attraction_id in day.attraction_ids]
-    if any(attraction_id not in found_ids for attraction_id in used_ids):
+    if any(attraction_id not in found_catalog for attraction_id in used_ids):
         raise AgentInvalidOutput()
     if len(used_ids) != len(set(used_ids)):
         raise AgentInvalidOutput()
+    if [day.day for day in candidate.days] != list(range(1, request.day_count + 1)):
+        raise AgentInvalidOutput()
+    for day in candidate.days:
+        if day.attraction_ids and not (day.note and day.note.strip()):
+            raise AgentInvalidOutput()
+        if len(day.attraction_ids) > 2:
+            raise AgentInvalidOutput()
+        items = [found_catalog[item_id] for item_id in day.attraction_ids]
+        if sum(item.duration_min or 0 for item in items) > 480:
+            raise AgentInvalidOutput()
+        if any(item.area == "南澳" for item in items) and any(
+            item.area != "南澳" for item in items
+        ):
+            raise AgentInvalidOutput()
     return candidate

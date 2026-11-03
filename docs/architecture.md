@@ -29,7 +29,7 @@ backend/                           B 初始化工程与依赖
   app/catalog/                     B 景点读取、查询、lookup
   app/planning/                    B 生成入口、模型与工具调用
   app/itineraries/                 A 规则推荐、统一校验、费用、保存
-  data/attractions.json            B 预置示例景点，可提交
+  data/attractions.json            B 整理汕头景点参考资料，可提交
   data/trips.json                  A 本地保存结果，忽略不提交
   tests/test_catalog_planning*     B 的测试
   tests/test_itineraries*          A 的测试
@@ -49,7 +49,7 @@ docs/experiments/                  按实验主责整理
 | B | `app.catalog.service.get_catalog() -> dict[str, Attraction]` | A 校验 ID、城市和费用；B 初始化时一并提供 |
 | A | `app.itineraries.service.validate_and_enrich(draft: PlanInput) -> PlanView` | 普通编辑、规则/Agent 结果和保存共同使用；不写文件 |
 | A | `app.itineraries.rules.make_rule_candidate(request: GenerationRequest) -> PlanInput` | B 的规则模式入口使用；生成确定草案，不写文件 |
-| B | `app.planning.agent.generate_candidate(request: GenerationRequest) -> AgentCandidate` | 内部可异步；仅返回分日 ID，B 合并原请求后调用 A 的统一校验 |
+| B | `app.planning.agent.generate_candidate(request: GenerationRequest) -> AgentCandidate` | 内部可异步；返回分日 ID 和可选说明，B 合并原请求后调用 A 的统一校验 |
 | A | `app.itineraries.router.router` | B 在应用入口一次注册校验与保存、列表、详情、删除路由 |
 
 `GET /api/attractions`、`GET /api/health` 和 `POST /api/plans/generate` 由 B 提供；其他行程接口由 A 提供。B 的生成入口把两种模式的候选都交给 A 校验：用户输入非法为 422，Agent 候选非法转换成 502，不直接返回原始模型结果。
@@ -60,7 +60,7 @@ docs/experiments/                  按实验主责整理
 
 ## 4. 前端组件交接
 
-规划模块提供 `PlanningPanel.vue`，B 维护。它自行使用公共客户端调用景点和生成接口，通过 `plan-generated` 事件向父页面发出 `PlanView`，通过 `catalog-loaded` 事件发出完整示例景点数组。A 的应用入口接收事件，向行程模块传入数据。
+规划模块提供 `PlanningPanel.vue`，B 维护。它自行使用公共客户端调用景点和生成接口，通过 `plan-generated` 事件向父页面发出 `PlanView`，通过 `catalog-loaded` 事件发出完整汕头景点数组。A 的应用入口接收事件，向行程模块传入数据。
 
 公共客户端对模块提供 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`：`path` 使用 `/api` 开头的相对路径；响应非 2xx 时拒绝 Promise，错误消息取后端的可读 `message`，无法解析时使用通用提示。调用方为 JSON 请求自行设置 `Content-Type` 和序列化请求体。该签名用于成员间的内部模块交接，不改变 HTTP 契约。
 
@@ -78,7 +78,7 @@ docs/experiments/                  按实验主责整理
 
 ## 6. Agent 的最小实现
 
-B 通过 LangChain 创建一个 Agent，只提供 `search_attractions(city)` 工具，工具必须验证参数为本次请求的城市，然后调用同一个景点服务，返回该城市全部示例景点。偏好在生成时处理，避免多次查询与复杂工具选择。
+B 通过 LangChain 创建一个 Agent，只提供 `search_attractions(city)` 工具，工具必须验证参数为汕头，然后调用同一个景点服务，返回景点、区域、参考时长和已知票价。偏好在生成时处理，避免多次查询与复杂工具选择。
 
 工具返回可用 ID 集合；模型最终消息输出普通 JSON，结构为 `AgentCandidate`。以 JSON 解析和 Pydantic 校验最终文本，不用模型反复修复结果。避免采用额外的“结构化输出工具”而意外增加工具种类及调用次数；若采用模型原生结构化输出，也需验证不增加额外调用。
 

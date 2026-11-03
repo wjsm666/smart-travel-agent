@@ -1,19 +1,19 @@
 # 智能旅游行程规划与管理系统
 
-用户根据目的地、天数、兴趣和预算生成行程草案，调整后确认保存。使用预置景点示例数据，提供规则推荐和一个带只读查询工具的单 Agent 推荐。
+用户根据天数、兴趣和预算生成汕头行程草案，调整后确认保存。使用人工整理的真实汕头景点参考资料，提供规则推荐和一个带只读查询工具的单 Agent 推荐。
 
 **当前状态：B 的后端基础、景点查询和单 Agent 模块已开发；完整应用仍待 A 的行程服务和前端工程接入。** Agent 已做离线替身测试，真实模型联调尚未完成。详见 [开发进度](docs/development.md)。
 
 ## 项目目标
 
-优先完成软件工程实验一至七的需求分析、UML 建模和报告；开发按模块推进一个本地可运行原型。使用虚构景点和参考门票，不接实时旅游数据，不提供预订、支付或导航。
+优先完成软件工程实验一至七的需求分析、UML 建模和报告；开发按模块推进一个本地可运行原型。只覆盖汕头，使用人工整理的参考门票；资料并非实时，不提供预订、支付或导航。
 
 | 部分 | 本版选型 |
 | --- | --- |
 | 前端 | Vue 3、TypeScript、Vite、Element Plus |
 | 后端 | Python、FastAPI、Pydantic 2 |
 | Agent | LangChain `create_agent`、一个支持工具调用的模型、一个只读查询工具 |
-| 数据 | 本地 JSON 示例数据及本地行程文件 |
+| 数据 | 本地 JSON 景点参考资料及本地行程文件 |
 | 建模与协作 | StarUML、Git、GitHub |
 
 保留原方案的语言和主要框架，Agent 接口作有限简化。本版固定使用 JSON；PostgreSQL、SQLAlchemy 等原方案组件列为后续扩展，不在开发途中临时接入。
@@ -25,7 +25,7 @@
 | 成员 | 模块及完整交付 | 主要文件范围 |
 | --- | --- | --- |
 | **A** | **行程编辑与管理**：草案展示与调整、统一校验和费用计算、规则推荐、确认保存、查看和删除；维护前端入口与公共前端类型 | `frontend/src/modules/trips/`、`backend/app/itineraries/`，前端入口及 `types/`、`api/client.ts` |
-| **B** | **景点与智能规划**：需求输入、景点浏览与示例数据、生成接口、单 Agent 工具调用及错误处理；维护后端入口与公共请求模型 | `frontend/src/modules/planning/`、`backend/app/catalog/`、`backend/app/planning/`、`backend/data/attractions.json`，后端入口及 `contracts.py`、`errors.py` |
+| **B** | **景点与智能规划**：需求输入、汕头景点参考资料、生成接口、单 Agent 工具调用及错误处理；维护后端入口与公共请求模型 | `frontend/src/modules/planning/`、`backend/app/catalog/`、`backend/app/planning/`、`backend/data/attractions.json`，后端入口及 `contracts.py`、`errors.py` |
 
 A 负责前端工程初始化，B 负责后端工程初始化。两人各自维护工程入口、依赖与锁文件；需要对方新增入口注册时提交具体模块接口，由入口负责人一次接入。公共接口和数据契约已写在文档中，模块内部实现不必逐项请求对方确认。
 
@@ -62,7 +62,7 @@ uv sync --locked
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-另开终端在 `backend` 目录执行 `uv run --locked pytest -q`。健康检查为 `http://127.0.0.1:8000/api/health`，示例景点为 `/api/attractions`。A 的行程服务合入前，生成接口返回 503 `SERVICE_NOT_READY`。前端主工程尚待 A 初始化；B 的规划组件已在隔离工程验证，不代表整个前端已经构建。
+另开终端在 `backend` 目录执行 `uv run --locked pytest -q`。健康检查为 `http://127.0.0.1:8000/api/health`，景点资料为 `/api/attractions`。A 的行程服务合入前，生成接口返回 503 `SERVICE_NOT_READY`。前端主工程尚待 A 初始化；B 的规划组件已在隔离工程验证，不代表整个前端已经构建。
 
 ## 本地配置
 

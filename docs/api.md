@@ -1,6 +1,6 @@
 # 接口和数据契约
 
-本文是字段、HTTP、错误及保存格式的唯一详细契约。B 已实现健康检查和景点查询；生成接口在 A 的行程服务接入后才能返回完整结果，其余行程接口由 A 实现。所有金额为非负整数人民币元，字段使用 snake_case，成功响应直接返回对象，错误统一为下文结构。
+本文是字段、HTTP、错误及保存格式的唯一详细契约。B 已实现健康检查和景点查询；生成接口在 A 的行程服务接入后才能返回完整结果，其余行程接口由 A 实现。已知金额为非负整数人民币元，未知票价使用 null；字段使用 snake_case。
 
 ## 1. 公共模型
 
@@ -8,16 +8,20 @@ Pydantic 模型由 B 放在 `backend/app/contracts.py`，TypeScript 类型由 A 
 
 | 模型 | 字段与约束 |
 | --- | --- |
-| `Attraction` | `id` 唯一非空字符串；`city`、`name`、`description` 非空字符串；`category` 为自然/人文/休闲之一；`ticket_cny` 非负整数 |
-| `GenerationRequest` | `city` 为支持的城市；`day_count` 为 1–5 整数；`preferences` 为类别数组，默认空且去重；`budget_cny` 非负整数必填；`mode` 必填 `rules` 或 `agent` |
-| `CandidateDay` | `day` 整数；`attraction_ids` 字符串数组；额外的顺序、去重与城市检查由业务校验执行 |
+| `Attraction` | `id`、`city`、`name`、`description`；`category` 为自然/人文/休闲；`ticket_cny` 为非负整数或 null；`area`、`duration_min`、`source_url`、`ticket_source_url`、`ticket_checked_at`、`ticket_note` 为参考资料字段 |
+| `GenerationRequest` | `city` 固定汕头；`day_count` 为 1–5 整数；`preferences` 为类别数组，默认空且去重；`budget_cny` 非负整数必填；`mode` 必填 `rules` 或 `agent` |
+| `CandidateDay` | `day` 整数；`attraction_ids` 字符串数组；可选 `note` 保存每日建议，最长 240 字；额外的顺序、去重与城市检查由业务校验执行 |
 | `AgentCandidate` | 只有 `days: CandidateDay[]`；模型不能指定费用、城市、来源或保存信息 |
 | `PlanInput` | `GenerationRequest` 的全部字段 + `days: CandidateDay[]`；用于调整校验与确认保存 |
-| `PlanDay` | `day`、`attractions: Attraction[]`、`subtotal_cny` |
-| `PlanView` | `city`、`day_count`、`preferences`、`budget_cny`、`mode`、`status="draft"`、`days: PlanDay[]`、`total_cny`、`over_budget` 布尔值、`warnings: string[]` |
+| `PlanDay` | `day`、`attractions: Attraction[]`、`subtotal_cny` 已知门票之和、可选 `note` |
+| `PlanView` | `city`、`day_count`、`preferences`、`budget_cny`、`mode`、`status="draft"`、`days: PlanDay[]`、已知门票之和 `total_cny`、`has_unknown_prices` 布尔值、`over_budget` 布尔值或 null、`warnings: string[]` |
 | `SavedTrip` | 与 `PlanView` 相同业务字段，`status="saved"`，额外增加 `trip_id`（服务端 UUID 字符串）、`created_at`（UTC ISO 8601）；保存完整景点和费用快照 |
 
 分日数组长度必须与天数一致，`day` 依次为 1 至 `day_count`，每天最多两个景点，全行程去重。验证接口可以返回全空草案及警告，保存全空草案为 422。
+
+南澳与其他区域不得安排在同一天，每日景点参考游览时长合计不超过 480 分钟；该值不含实时交通，不能保证实际行程可行。景点不足或未知时应提示。`note` 是用户可见的普通文本；前端调整当天景点或顺序时清空该天 `note`，其他天说明保持不变，校验和保存原样保留新提交的说明或 null。
+
+费用规则：每天小计与总额仅汇总非 null 的已知价格；只要有未知票价，`has_unknown_prices=true`。已知费用已经超过预算时 `over_budget=true`；否则有未知票价时为 `null`（待确认）；只有价格全部已知且不超预算时为 `false`。必须提示费用不完整及交通、餐饮、住宿未计入。
 
 `mode` 描述生成来源；手工修改仍保留原来源，它不是签名认证或“保存内容完全由 AI 生成”的证明。校验和保存响应根据提交的当前草案重算费用及警告，`status` 由服务端决定。
 
@@ -42,31 +46,31 @@ Pydantic 模型由 B 放在 `backend/app/contracts.py`，TypeScript 类型由 A 
 
 ## 3. 可直接对接的示例
 
-以下名称和费用均为虚构示例。完整初始化数据应至少包含本文使用的两个 ID。
+以下为结构示例；价格和资料可能变化，实际字段以本地数据和景区最新信息为准。
 
 生成请求：
 
 ```json
-{"city":"厦门","day_count":2,"preferences":["自然"],"budget_cny":50,"mode":"rules"}
+{"city":"汕头","day_count":1,"preferences":["人文"],"budget_cny":50,"mode":"rules"}
 ```
 
 标准草案（这里演示两个景点的结构，实际结果根据初始化数据确定）：
 
 ```json
 {
-  "city":"厦门",
-  "day_count":2,
-  "preferences":["自然"],
+  "city":"汕头",
+  "day_count":1,
+  "preferences":["人文"],
   "budget_cny":50,
   "mode":"rules",
   "status":"draft",
   "days":[
-    {"day":1,"attractions":[{"id":"xm-001","city":"厦门","name":"示例海滨公园","category":"自然","description":"虚构课程景点。","ticket_cny":30}],"subtotal_cny":30},
-    {"day":2,"attractions":[{"id":"xm-002","city":"厦门","name":"示例山林步道","category":"自然","description":"虚构课程景点。","ticket_cny":25}],"subtotal_cny":25}
+    {"day":1,"attractions":[{"id":"st-001","city":"汕头","name":"小公园开埠区","category":"人文","area":"老城","description":"以骑楼街区和开埠历史为特色的城市文化街区。","duration_min":150,"ticket_cny":0,"source_url":"https://www.shantou.gov.cn/cnst/zdly/lyscjgzfxxgk/cyzl/content/post_2382355.html","ticket_source_url":"https://travelnews.qunar.com/qa_strategy/shantou-2026-july-august-travel-guide","ticket_checked_at":"2026-11-03","ticket_note":"街区参考免费，内部展馆可能另有规定。"}],"subtotal_cny":0,"note":"建议上午游览老城。"}
   ],
-  "total_cny":55,
-  "over_budget":true,
-  "warnings":["费用仅包含示例景点门票，不含交通、餐饮和住宿。","门票估算超过预算。"]
+  "total_cny":0,
+  "has_unknown_prices":false,
+  "over_budget":false,
+  "warnings":["费用仅包含参考景点门票，不含交通、餐饮和住宿。"]
 }
 ```
 
@@ -74,14 +78,14 @@ Pydantic 模型由 B 放在 `backend/app/contracts.py`，TypeScript 类型由 A 
 
 ```json
 {
-  "city":"厦门","day_count":2,"preferences":["自然"],"budget_cny":50,"mode":"rules",
-  "days":[{"day":1,"attraction_ids":["xm-001"]},{"day":2,"attraction_ids":["xm-002"]}]
+  "city":"汕头","day_count":1,"preferences":["人文"],"budget_cny":50,"mode":"rules",
+  "days":[{"day":1,"attraction_ids":["st-001"],"note":"建议上午游览老城。"}]
 }
 ```
 
 保存响应为上述草案业务字段加 `trip_id`、`created_at`，并将 `status` 改为 `saved`。客户端不得发送价格、警告、状态、保存 ID 或时间，否则按额外字段拒绝。保存前端显示的估算不是跳过服务端校验的理由。
 
-`warnings` 由服务端根据当前内容生成：始终说明门票范围；超预算、空白日期、没有偏好匹配或使用了非偏好类别时增加相应提示。文案可调整，逻辑语义固定，前端不靠匹配文案决定业务行为。
+`warnings` 由服务端根据当前内容生成：始终说明门票范围；未知票价、超预算、空白日期、没有偏好匹配或使用了非偏好类别时增加相应提示。文案可调整，前端不靠匹配文案决定业务行为。
 
 ## 4. 错误约定
 
@@ -105,7 +109,7 @@ B 在应用入口统一映射 FastAPI 请求校验错误和模块业务错误；
 
 ## 5. 文件格式
 
-`attractions.json` 是 `Attraction[]`，初始化至少两个城市（厦门、泉州），每城 6 个虚构景点，三类各两个。`xm-001`、`xm-002` 使用上例的名称、类别和门票，其余 ID 使用 `xm-003…006`、`qz-001…006`，数据由 B 维护。完整性错误要报告，不能在启动时默默修补。
+`attractions.json` 是 `Attraction[]`，只含汕头真实景点；地区分组和时长为人工规划估计，票价以来源及核对时间为参考。不能确认的价格为 null。完整性错误要报告，不能在启动时默默修补。
 
 `trips.json` 是 `SavedTrip[]`。A 在保存时生成 UUID 和 UTC 时间，并保存完整景点与金额快照。文件缺失为空历史，损坏或读取失败返回 `STORAGE_ERROR`。前端查看历史直接展示快照，不通过当前景点数据重算；历史费用不因样例更新而改变。
 

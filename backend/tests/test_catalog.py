@@ -6,7 +6,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.catalog import service
 from app.config import BACKEND_DIR, Settings
-from app.contracts import GenerationRequest, SavedTrip
+from app.contracts import GenerationRequest, PlanDay, PlanView, SavedTrip
 from app.errors import StorageError
 from app.main import app
 
@@ -17,32 +17,30 @@ def client():
         yield test_client
 
 
-def test_seed_is_unique_and_has_six_examples_per_city():
+def test_seed_has_real_shantou_places_with_provenance():
     catalog = service.get_catalog()
     assert len(catalog) == 12
-    assert {item.city for item in catalog.values()} == {"厦门", "泉州"}
-    for city in ("厦门", "泉州"):
-        items = service.list_attractions(city=city)
-        assert len(items) == 6
-        assert {
-            kind: sum(item.category == kind for item in items) for kind in ("自然", "人文", "休闲")
-        } == {
-            "自然": 2,
-            "人文": 2,
-            "休闲": 2,
-        }
+    assert {item.city for item in catalog.values()} == {"汕头"}
+    assert {item.category for item in catalog.values()} == {"自然", "人文", "休闲"}
+    assert all(item.source_url and item.duration_min for item in catalog.values())
+    assert any(item.ticket_cny is None for item in catalog.values())
+    assert all(
+        item.ticket_source_url and item.ticket_checked_at
+        for item in catalog.values()
+        if item.ticket_cny is not None
+    )
 
 
 def test_health_filtering_and_empty_results(client):
     assert client.get("/api/health").json() == {"status": "ok"}
-    items = client.get("/api/attractions", params={"city": "厦门", "category": "自然"}).json()[
+    items = client.get("/api/attractions", params={"city": "汕头", "category": "自然"}).json()[
         "items"
     ]
-    assert [item["id"] for item in items] == ["xm-001", "xm-002"]
-    keyword = client.get("/api/attractions", params={"city": "厦门", "keyword": "公园"}).json()[
+    assert [item["id"] for item in items] == ["st-006", "st-007", "st-008", "st-010"]
+    keyword = client.get("/api/attractions", params={"city": "汕头", "keyword": "小公园"}).json()[
         "items"
     ]
-    assert [item["id"] for item in keyword] == ["xm-001"]
+    assert [item["id"] for item in keyword] == ["st-001"]
     assert client.get("/api/attractions", params={"city": "不存在"}).json() == {"items": []}
     invalid = client.get("/api/attractions", params={"category": "未知"})
     assert invalid.status_code == 422
@@ -127,3 +125,41 @@ def test_saved_trip_requires_uuid_and_utc_timestamp():
         SavedTrip(**{**fields, "created_at": "2026-11-03T10:00:00+08:00"})
     with pytest.raises(PydanticValidationError):
         SavedTrip(**{**fields, "created_at": "2026-11-03T10:00:00"})
+
+
+def test_unknown_ticket_is_not_interpreted_as_free_or_under_budget():
+    unknown = service.get_catalog()["st-004"]
+    day = PlanDay(day=1, attractions=[unknown], subtotal_cny=0)
+    fields = {
+        "city": "汕头",
+        "day_count": 1,
+        "budget_cny": 50,
+        "mode": "rules",
+        "days": [day],
+        "total_cny": 0,
+        "warnings": [],
+    }
+    plan = PlanView(**fields, has_unknown_prices=True, over_budget=None)
+    assert plan.over_budget is None
+    with pytest.raises(PydanticValidationError):
+        PlanView(**fields, has_unknown_prices=False, over_budget=False)
+    with pytest.raises(PydanticValidationError):
+        PlanView(**fields, has_unknown_prices=True, over_budget=False)
+
+
+def test_unknown_ticket_does_not_hide_known_over_budget():
+    unknown = service.get_catalog()["st-004"]
+    known = unknown.model_copy(update={"ticket_cny": 60})
+    day = PlanDay(day=1, attractions=[unknown, known], subtotal_cny=60)
+    plan = PlanView(
+        city="汕头",
+        day_count=1,
+        budget_cny=50,
+        mode="rules",
+        days=[day],
+        total_cny=60,
+        warnings=[],
+        has_unknown_prices=True,
+        over_budget=True,
+    )
+    assert plan.over_budget is True

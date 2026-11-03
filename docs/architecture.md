@@ -4,7 +4,7 @@
 
 Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 封装 HTTP；Python 3.13、FastAPI、Pydantic 2 构成后端。LangChain `create_agent` 用于一个小型规划助手，模型适配依赖由 B 根据实际可用服务验证后添加。它替代手写 LangGraph 编排；不增加第二个 Agent 框架。
 
-前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 初始化时验证兼容版本并提交各自锁文件。Node 环境满足所选 Vite 的要求；官方当前说明为 20.19+ 或 22.12+，模板可有额外要求，初始化时再次核对。尚未创建应用工程，本文不是已验证的运行说明。
+前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 初始化时验证兼容版本并提交各自锁文件。Node 环境满足所选 Vite 的要求；官方当前说明为 20.19+ 或 22.12+，模板可有额外要求，初始化时再次核对。B 的后端已初始化，前端主工程和 A 的行程模块待接入。
 
 本版数据为 UTF-8 JSON，PostgreSQL、SQLAlchemy、Alembic、Pinia、Docker、CI 暂不启用；不另换语言、UI 框架或数据库。
 
@@ -12,7 +12,7 @@ Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 
 
 ## 2. 目标目录和负责人
 
-以下为目标结构，除已经存在的文档和规则外，应用文件在对应开发阶段再创建。不要提交无意义空模块。
+以下为目标结构；B 的景点和规划部分已开发，A 的入口与行程模块在对应开发阶段创建。不要提交无意义空模块。
 
 ```text
 frontend/                          A 初始化工程与依赖
@@ -61,6 +61,8 @@ docs/experiments/                  按实验主责整理
 ## 4. 前端组件交接
 
 规划模块提供 `PlanningPanel.vue`，B 维护。它自行使用公共客户端调用景点和生成接口，通过 `plan-generated` 事件向父页面发出 `PlanView`，通过 `catalog-loaded` 事件发出完整示例景点数组。A 的应用入口接收事件，向行程模块传入数据。
+
+公共客户端对模块提供 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`：`path` 使用 `/api` 开头的相对路径；响应非 2xx 时拒绝 Promise，错误消息取后端的可读 `message`，无法解析时使用通用提示。调用方为 JSON 请求自行设置 `Content-Type` 和序列化请求体。该签名用于成员间的内部模块交接，不改变 HTTP 契约。
 
 行程模块提供 `TripWorkspace.vue`，A 维护。props 为 `draft: PlanView | null`、`attractions: Attraction[]`；内部完成编辑、校验和保存请求、历史列表与删除。父页面收到新草案时，若有未保存编辑，提示用户确认替换，避免覆盖。
 

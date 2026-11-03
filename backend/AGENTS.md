@@ -1,6 +1,6 @@
 # 后端开发规则
 
-遵循根 `AGENTS.md`。使用 Python、FastAPI、Pydantic 2，具体依赖由 B 初始化并锁定。当前只有规则和配置模板，尚无应用代码。
+遵循根 `AGENTS.md`。使用 Python、FastAPI、Pydantic 2，B 已初始化并锁定后端依赖。行程服务待 A 接入，真实模型联调尚未完成。
 
 B 维护 `app/main.py`、`app/contracts.py`、`app/errors.py`、配置和后端依赖；A 维护 `app/itineraries/`；B 维护 `app/catalog/`、`app/planning/` 和景点样例。接口签名见 `docs/architecture.md`。
 

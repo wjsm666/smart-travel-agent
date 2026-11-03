@@ -1,6 +1,6 @@
 # 开发顺序与启动任务
 
-本版按实验和模块推进，无日历工期承诺。应用开发状态目前均为未开始；本文件列的是目标与检查点。
+本版按实验和模块推进，无日历工期承诺。B 的后端和规划组件已开发；A 的行程服务、前端主工程和整体联调仍待完成。下表是目标与检查点。
 
 ## 1. 阶段与完成边界
 
@@ -54,7 +54,13 @@
 | 项目 | 状态 | 备注 |
 | --- | --- | --- |
 | 文档与协作基线 | 已整理 | 规则、契约和任务已写出，待双方使用并按实施同步维护 |
-| A D0 / D1 | 未开始 | 不表示已有前端或行程代码 |
-| B D0 / D1 | 未开始 | 不表示已有后端或 Agent 代码 |
+| A D0 / D1 | 待接入 | 远端检查时未发现行程服务或前端工程 |
+| B D0 / D1 | 开发中 | 后端基础、景点、Agent 和规划组件已实现；真实模型及整体联调未完成 |
 | D2 联调 | 未开始 | 真实工具调用和应用构建未进行 |
 | 课程实验 | 按实际教学进度记录 | 详见 experiments/README.md，不以文档建立视为实验完成 |
+
+### B 给 A 的对接事项
+
+1. A 初始化前端工程、`contracts.ts` 与 `api/client.ts`。规划组件依赖的 `requestJson<T>(path, init?)` 签名和 `catalog-loaded`、`plan-generated` 事件见 `architecture.md`。
+2. A 实现 `app.itineraries.rules.make_rule_candidate`、`app.itineraries.service.validate_and_enrich` 和 `app.itineraries.router.router`。合入后重启后端即可注册行程路由；生成接口当前会明确返回 `SERVICE_NOT_READY`，不会使用生产假数据。
+3. B 的规划组件已用临时接口替身做类型检查、构建和交互检查。隔离测试中 `vue-tsc` 3.3.14 与 TypeScript 7.0.2 不兼容，换用 TypeScript 5.9.3 后通过；A 初始化时应以实际依赖组合和锁文件复核。

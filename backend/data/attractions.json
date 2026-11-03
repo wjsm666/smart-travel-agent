@@ -1,0 +1,14 @@
+[
+  {"id":"xm-001","city":"厦门","name":"示例海滨公园","category":"自然","description":"虚构课程景点。","ticket_cny":30},
+  {"id":"xm-002","city":"厦门","name":"示例山林步道","category":"自然","description":"虚构课程景点。","ticket_cny":25},
+  {"id":"xm-003","city":"厦门","name":"示例海洋博物馆","category":"人文","description":"虚构课程景点。","ticket_cny":40},
+  {"id":"xm-004","city":"厦门","name":"示例历史街区","category":"人文","description":"虚构课程景点。","ticket_cny":15},
+  {"id":"xm-005","city":"厦门","name":"示例花园广场","category":"休闲","description":"虚构课程景点。","ticket_cny":10},
+  {"id":"xm-006","city":"厦门","name":"示例文创园","category":"休闲","description":"虚构课程景点。","ticket_cny":20},
+  {"id":"qz-001","city":"泉州","name":"示例山水公园","category":"自然","description":"虚构课程景点。","ticket_cny":20},
+  {"id":"qz-002","city":"泉州","name":"示例江滨绿道","category":"自然","description":"虚构课程景点。","ticket_cny":0},
+  {"id":"qz-003","city":"泉州","name":"示例文化展馆","category":"人文","description":"虚构课程景点。","ticket_cny":30},
+  {"id":"qz-004","city":"泉州","name":"示例古城街巷","category":"人文","description":"虚构课程景点。","ticket_cny":10},
+  {"id":"qz-005","city":"泉州","name":"示例艺术花园","category":"休闲","description":"虚构课程景点。","ticket_cny":15},
+  {"id":"qz-006","city":"泉州","name":"示例手作市集","category":"休闲","description":"虚构课程景点。","ticket_cny":5}
+]

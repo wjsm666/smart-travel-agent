@@ -17,3 +17,17 @@ A/B 的开发模块主责见根 README。报告主责交替安排，综合部分
 按需创建 `experiment-01/` 至 `experiment-07/`，保留模型源文件、可读导出图和报告。不要在尚未完成时提交假截图或把空目录当成果。个人信息按提交用途处理，不将不必要的学号、姓名和教师签名放进公开仓库。
 
 实验八 SVN 是指导书另列练习，按教师安排单独处理，不擅自并入前七次。当前文档建立不代表任何一次课程报告已经完成。
+
+## 实验一当前安排
+
+2026-11-05 最新决定：只做汕头单城精简需求。A 负责系统目标及边界、F02/F03 正式四字段表、单 Agent 需求设计和五章 Word 初稿；B 独立交付 F01/F04/F05/F06 正式表、UML 学习记录、StarUML 版本与实际操作截图、功能结构图源文件和导出图片，并复核 A 材料。A 统稿，避免同时编辑 Word。
+
+11/07 形成可提交版，11/08 复查与提交备份。当前只有成员 A 初稿，B 材料及双方互审未完成，不表示实验一已完成提交。代码模块职责仍以根 README 为准。
+
+- [资料审查](experiment-01/A-source-review.md)
+- [系统目标](experiment-01/project-goals.md)
+- [A 功能表](experiment-01/function-specifications-A.md)
+- [Agent 设计](experiment-01/agent-flow-notes.md)
+- [交付及 B 交接清单](experiment-01/A-deliverables-checklist.md)
+- [仓库对齐记录](experiment-01/repository-alignment-notes.md)
+- [Word 初稿](experiment-01/report/软件工程实验一_汕头旅游系统_成员A初稿.docx)

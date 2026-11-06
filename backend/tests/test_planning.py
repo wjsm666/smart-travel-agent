@@ -251,3 +251,48 @@ def test_agent_candidate_business_failure_maps_to_invalid_output(monkeypatch):
         response = client.post("/api/plans/generate", json=request().model_dump())
     assert response.status_code == 502
     assert response.json()["code"] == "AGENT_INVALID_OUTPUT"
+
+
+def test_agent_workflow_reaches_a_validation_and_can_be_edited(configured, monkeypatch, caplog):
+    """Use the actual agent loop and A services; only the paid model is replaced."""
+    caplog.set_level("INFO", logger="app.planning.service")
+    use_model(monkeypatch, [AIMessage(content="", tool_calls=[model_call()]), final_message()])
+    with TestClient(app) as client:
+        response = client.post("/api/plans/generate", json=request().model_dump())
+        assert response.status_code == 200
+        plan = response.json()
+        assert plan["status"] == "draft" and plan["mode"] == "agent"
+        assert plan["days"][0]["attractions"][0] == get_catalog()["st-001"].model_dump()
+        assert plan["days"][0]["note"] == "建议上午游览。"
+        adjusted = {
+            **request().model_dump(),
+            "days": [{"day": 1, "attraction_ids": ["st-007"], "note": None}],
+        }
+        validated = client.post("/api/plans/validate", json=adjusted)
+    assert validated.status_code == 200
+    assert validated.json()["total_cny"] == get_catalog()["st-007"].ticket_cny
+    assert validated.json()["days"][0]["note"] is None
+    records = [r for r in caplog.records if r.name == "app.planning.service"]
+    assert len({r.run_id for r in records}) == 1
+    assert "stage=draft_ready" in records[-1].message
+    assert "test-key" not in caplog.text
+
+
+def test_workflow_failure_stops_before_validation_without_fallback(configured, monkeypatch, caplog):
+    caplog.set_level("INFO", logger="app.planning.service")
+    use_model(
+        monkeypatch, [AIMessage(content="", tool_calls=[model_call()]), final_message(["bad-id"])]
+    )
+    monkeypatch.setattr(
+        service,
+        "get_itinerary_services",
+        lambda: (
+            lambda _: pytest.fail("unexpected rules fallback"),
+            lambda _: pytest.fail("invalid candidate reached A"),
+        ),
+    )
+    with TestClient(app) as client:
+        response = client.post("/api/plans/generate", json=request().model_dump())
+    assert response.status_code == 502
+    assert "failed stage=generate_candidate code=AGENT_INVALID_OUTPUT" in caplog.text
+    assert "stage=draft_ready" not in caplog.text

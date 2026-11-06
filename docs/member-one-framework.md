@@ -70,3 +70,27 @@ uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000
 2026-11-06 实测：使用 `uv sync --locked` 安装现有锁文件，Python 3.13.18；后端 `pytest -q` 共 43 项通过，`ruff check app tests` 与 `ruff format --check app tests` 通过。启动临时本机 Uvicorn 服务，通过真实 HTTP 检查健康接口、规则生成、草案重新校验及 Swagger 页面；未配置模型时 Agent 明确返回 503 `AGENT_UNAVAILABLE`。这次未执行真实模型调用或完整前端构建。
 
 后续按需要接入 Vue 主工程、草案编辑与确认保存；本次不展开数据库、账户、地图、更多工具、RAG 或多 Agent。真实 Agent 的工具调用记录留待具备可用模型服务时验证。
+
+## 本轮基础工作流补齐（2026-11-06）
+
+本轮以“需求 → 候选 → 统一校验 → 草案”为交付边界，不把“一半左右”换算为没有依据的完成百分比。沿用已有单 Agent，实现可调试、可检查的基础链路；前端、持久化、其他模块、额外工具与资产批处理均不展开。HTTP 请求与响应字段不变。
+
+`app/planning/service.py` 负责固定顺序的工作流，`agent.py` 内部负责模型/工具循环，A 的 `itineraries/service.py` 负责最终业务校验。前者新增 `check_request → generate_candidate → validate_draft → draft_ready` 阶段日志；每次生成有独立 `run_id`，失败记录阶段和错误码，不记录需求正文、模型回复、密钥或原始异常。日志表示执行阶段，不是模型的隐藏思考过程；HTTP 请求解析失败时尚未进入这些阶段。
+
+新增本地入口，与 HTTP 使用同一服务。在 `backend` 下执行：
+
+```powershell
+uv run --locked python -m app.planning --mode rules --days 2 --budget 100 --preference 自然
+```
+
+终端标准错误显示阶段，标准输出显示草案 JSON；入口不保存文件。默认 `rules` 不初始化模型。天数/预算非法或服务失败时退出码为 1。显式选择 `--mode agent` 才使用本地模型配置并可能消耗配额；失败不会回退为规则。
+
+已配置可用模型后，手动尝试：
+
+```powershell
+uv run --locked python -m app.planning --mode agent --days 2 --budget 100 --preference 人文
+```
+
+理解代码可按 `contracts.py → catalog/service.py → planning/agent.py → planning/service.py → itineraries/service.py` 阅读。`@tool` 将有明确参数和描述的 Python 函数暴露给模型；模型提出调用请求，LangChain 执行本地函数并把结果交回模型。提示词说明规则，程序检查规则；两者缺一不可。
+
+本轮检查：后端 47 项测试通过，新增真实框架循环到 A 校验及调整重校验的离线贯穿测试、非法候选停止测试、命令行规则与错误退出检查。框架与本地工具确实执行，模型用测试替身，不能描述为真实模型质量验收。真实服务的工具调用兼容性、推荐质量、延迟与费用仍待具备凭据时验证。

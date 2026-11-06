@@ -4,7 +4,7 @@
 
 Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 封装 HTTP；Python 3.13、FastAPI、Pydantic 2 构成后端。LangChain `create_agent` 用于一个小型规划助手，模型适配依赖由 B 根据实际可用服务验证后添加。它替代手写 LangGraph 编排；不增加第二个 Agent 框架。
 
-前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 初始化时验证兼容版本并提交各自锁文件。Node 环境满足所选 Vite 的要求，初始化时再次核对。B 的后端已初始化，A 的规则与校验基础服务已接入，前端主工程和保存管理待做。
+前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 各自维护已验证的兼容版本和锁文件。前端声明 Node >=22.12.0，实际验证 Node 24.16.0、pnpm 11.25.0。B 的后端已初始化，A 的规则与校验服务、前端主工程和草案编辑已接入；保存管理待做。
 
 本版数据为 UTF-8 JSON，PostgreSQL、SQLAlchemy、Alembic、Pinia、Docker、CI 暂不启用；不另换语言、UI 框架或数据库。
 
@@ -12,7 +12,7 @@ Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 
 
 ## 2. 目标目录和负责人
 
-以下为目标结构；B 的景点和规划部分已开发，A 的规则、统一校验和校验路由已接入。前端主工程与保存管理仍是后续目标。不要提交无意义空模块。
+以下为目标结构；B 的景点和规划部分已开发，A 的规则、统一校验和校验路由、前端入口和草案编辑已接入。保存管理仍是后续目标。不要提交无意义空模块。
 
 ```text
 frontend/                          A 初始化工程与依赖
@@ -65,6 +65,8 @@ docs/experiments/                  按实验主责整理
 公共客户端对模块提供 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`：`path` 使用 `/api` 开头的相对路径；响应非 2xx 时拒绝 Promise，错误消息取后端的可读 `message`，无法解析时使用通用提示。调用方为 JSON 请求自行设置 `Content-Type` 和序列化请求体。该签名用于成员间的内部模块交接，不改变 HTTP 契约。
 
 行程模块提供 `TripWorkspace.vue`，A 维护。props 为 `draft: PlanView | null`、`attractions: Attraction[]`；内部完成编辑、校验和保存请求、历史列表与删除。父页面收到新草案时，若有未保存编辑，提示用户确认替换，避免覆盖。
+
+当前实现到草案编辑和重新校验，未实现上述保存/历史/删除目标。`TripWorkspace` 暴露只读的 `hasUnsavedChanges` 给父页面；当前所有草案均未保存，接收新生成草案前需确认替换。编辑状态在 `useDraftEditor.ts` 中维护，每次修改立即清除旧费用汇总、使旧校验请求失效；只应用当前版本的成功或失败响应。每日增删、移动或重排景点后清除受影响日的旧说明，费用和业务限制仍交后端统一校验。
 
 同一新草案对象以新的引用传入。行程模块复制为本地编辑状态，不直接修改 props；调用 `PlanInput` 接口时从每日 `attractions` 提取 ID。编辑响应只应用于对应草案版本，过期响应丢弃或取消请求。
 

@@ -4,7 +4,7 @@
 
 Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 封装 HTTP；Python 3.13、FastAPI、Pydantic 2 构成后端。LangChain `create_agent` 用于一个小型规划助手，模型适配依赖由 B 根据实际可用服务验证后添加。它替代手写 LangGraph 编排；不增加第二个 Agent 框架。
 
-前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 初始化时验证兼容版本并提交各自锁文件。Node 环境满足所选 Vite 的要求；官方当前说明为 20.19+ 或 22.12+，模板可有额外要求，初始化时再次核对。尚未创建应用工程，本文不是已验证的运行说明。
+前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 初始化时验证兼容版本并提交各自锁文件。Node 环境满足所选 Vite 的要求，初始化时再次核对。B 的后端已初始化，A 的规则与校验基础服务已接入，前端主工程和保存管理待做。
 
 本版数据为 UTF-8 JSON，PostgreSQL、SQLAlchemy、Alembic、Pinia、Docker、CI 暂不启用；不另换语言、UI 框架或数据库。
 
@@ -12,7 +12,7 @@ Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 
 
 ## 2. 目标目录和负责人
 
-以下为目标结构，除已经存在的文档和规则外，应用文件在对应开发阶段再创建。不要提交无意义空模块。
+以下为目标结构；B 的景点和规划部分已开发，A 的规则、统一校验和校验路由已接入。前端主工程与保存管理仍是后续目标。不要提交无意义空模块。
 
 ```text
 frontend/                          A 初始化工程与依赖
@@ -29,7 +29,7 @@ backend/                           B 初始化工程与依赖
   app/catalog/                     B 景点读取、查询、lookup
   app/planning/                    B 生成入口、模型与工具调用
   app/itineraries/                 A 规则推荐、统一校验、费用、保存
-  data/attractions.json            B 预置示例景点，可提交
+  data/attractions.json            B 整理汕头景点参考资料，可提交
   data/trips.json                  A 本地保存结果，忽略不提交
   tests/test_catalog_planning*     B 的测试
   tests/test_itineraries*          A 的测试
@@ -40,7 +40,7 @@ docs/experiments/                  按实验主责整理
 
 ## 3. 后端内部交接
 
-以下签名为待实现接口，模型结构以 `api.md` 为准。除 Agent 入口外均可为普通同步函数，具体依赖注入方式由模块负责人决定。
+以下服务签名已接通，模型结构以 `api.md` 为准。行程路由当前只提供校验，保存管理尚未实现。除 Agent 入口外均可为普通同步函数。
 
 | 提供者 | 模块出口 | 使用者与责任 |
 | --- | --- | --- |
@@ -49,8 +49,8 @@ docs/experiments/                  按实验主责整理
 | B | `app.catalog.service.get_catalog() -> dict[str, Attraction]` | A 校验 ID、城市和费用；B 初始化时一并提供 |
 | A | `app.itineraries.service.validate_and_enrich(draft: PlanInput) -> PlanView` | 普通编辑、规则/Agent 结果和保存共同使用；不写文件 |
 | A | `app.itineraries.rules.make_rule_candidate(request: GenerationRequest) -> PlanInput` | B 的规则模式入口使用；生成确定草案，不写文件 |
-| B | `app.planning.agent.generate_candidate(request: GenerationRequest) -> AgentCandidate` | 内部可异步；仅返回分日 ID，B 合并原请求后调用 A 的统一校验 |
-| A | `app.itineraries.router.router` | B 在应用入口一次注册校验与保存、列表、详情、删除路由 |
+| B | `app.planning.agent.generate_candidate(request: GenerationRequest) -> AgentCandidate` | 内部可异步；返回分日 ID 和可选说明，B 合并原请求后调用 A 的统一校验 |
+| A | `app.itineraries.router.router` | 应用入口已注册校验路由；保存、列表、详情、删除待实现 |
 
 `GET /api/attractions`、`GET /api/health` 和 `POST /api/plans/generate` 由 B 提供；其他行程接口由 A 提供。B 的生成入口把两种模式的候选都交给 A 校验：用户输入非法为 422，Agent 候选非法转换成 502，不直接返回原始模型结果。
 
@@ -60,7 +60,9 @@ docs/experiments/                  按实验主责整理
 
 ## 4. 前端组件交接
 
-规划模块提供 `PlanningPanel.vue`，B 维护。它自行使用公共客户端调用景点和生成接口，通过 `plan-generated` 事件向父页面发出 `PlanView`，通过 `catalog-loaded` 事件发出完整示例景点数组。A 的应用入口接收事件，向行程模块传入数据。
+规划模块提供 `PlanningPanel.vue`，B 维护。它自行使用公共客户端调用景点和生成接口，通过 `plan-generated` 事件向父页面发出 `PlanView`，通过 `catalog-loaded` 事件发出完整汕头景点数组。A 的应用入口接收事件，向行程模块传入数据。
+
+公共客户端对模块提供 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`：`path` 使用 `/api` 开头的相对路径；响应非 2xx 时拒绝 Promise，错误消息取后端的可读 `message`，无法解析时使用通用提示。调用方为 JSON 请求自行设置 `Content-Type` 和序列化请求体。该签名用于成员间的内部模块交接，不改变 HTTP 契约。
 
 行程模块提供 `TripWorkspace.vue`，A 维护。props 为 `draft: PlanView | null`、`attractions: Attraction[]`；内部完成编辑、校验和保存请求、历史列表与删除。父页面收到新草案时，若有未保存编辑，提示用户确认替换，避免覆盖。
 
@@ -76,7 +78,7 @@ docs/experiments/                  按实验主责整理
 
 ## 6. Agent 的最小实现
 
-B 通过 LangChain 创建一个 Agent，只提供 `search_attractions(city)` 工具，工具必须验证参数为本次请求的城市，本版固定汕头，然后调用同一个景点服务，返回该城市全部示例景点。偏好在生成时处理，避免多次查询与复杂工具选择。
+B 通过 LangChain 创建一个 Agent，只提供 `search_attractions(city)` 工具，工具必须验证参数为汕头，然后调用同一个景点服务，返回景点、区域、参考时长和已知票价。偏好在生成时处理，避免多次查询与复杂工具选择。
 
 工具返回可用 ID 集合；模型最终消息输出普通 JSON，结构为 `AgentCandidate`。以 JSON 解析和 Pydantic 校验最终文本，不用模型反复修复结果。避免采用额外的“结构化输出工具”而意外增加工具种类及调用次数；若采用模型原生结构化输出，也需验证不增加额外调用。
 

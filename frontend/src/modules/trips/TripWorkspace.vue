@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElButton } from 'element-plus'
 import 'element-plus/es/components/button/style/css'
 import type { Attraction, PlanView } from '../../types/contracts'
 import { useDraftEditor } from './useDraftEditor'
+import TripHistory from './TripHistory.vue'
 
 const props = defineProps<{ draft: PlanView | null; attractions: Attraction[] }>()
 const {
-  input, checked, validating, error, hasUnsavedChanges,
-  load, add, remove, move, reorder, setNote, setBudget, validate,
+  input, checked, validating, error, hasUnsavedChanges, saved, saving, saveError, canSave,
+  load, add, remove, move, reorder, setNote, setBudget, validate, save,
 } = useDraftEditor()
+const history = ref<InstanceType<typeof TripHistory> | null>(null)
 watch(() => props.draft, load, { immediate: true })
-defineExpose({ hasUnsavedChanges })
+defineExpose({ hasUnsavedChanges, saving })
+
+async function confirmSave() {
+  if (!canSave.value || !window.confirm('将当前行程和门票估算保存为历史快照？')) return
+  if (await save()) void history.value?.refresh()
+}
+
+function onDeleted(tripId: string) {
+  if (saved.value?.trip_id === tripId) load(null)
+}
 
 // Fall back to the generated snapshots if the catalog is temporarily unavailable.
 const catalog = computed(() => new Map([
@@ -20,8 +31,9 @@ const catalog = computed(() => new Map([
 const usedIds = computed(() => new Set(input.value?.days.flatMap(day => day.attraction_ids) ?? []))
 const available = computed(() => [...catalog.value.values()]
   .filter(item => item.city === input.value?.city && !usedIds.value.has(item.id)))
-const budgetLabel = computed(() => checked.value?.over_budget === true ? '已知门票超出预算'
-  : checked.value?.over_budget === null ? '预算待确认' : '已知门票在预算内')
+const result = computed(() => saved.value ?? checked.value)
+const budgetLabel = computed(() => result.value?.over_budget === true ? '已知门票超出预算'
+  : result.value?.over_budget === null ? '预算待确认' : '已知门票在预算内')
 
 function textValue(event: Event): string {
   return (event.target as HTMLInputElement).value
@@ -50,12 +62,13 @@ function ticketLabel(item: Attraction | undefined): string {
 
     <div v-if="!input" class="empty" role="status">还没有行程草案。请在上方填写需求，选择一种方式生成。</div>
     <template v-else>
+      <fieldset class="draft-fields" :disabled="saving || !!saved">
       <div class="toolbar">
         <span>{{ input.city }} · {{ input.day_count }} 天</span>
         <label>门票预算 <input aria-label="草案门票预算" type="number" min="0" step="1"
           :value="input.budget_cny" @input="setBudget(textValue($event).trim() ? Number(textValue($event)) : NaN)"> 元 / 人</label>
         <span class="status" :class="{ pending: !checked }" role="status">
-          {{ validating ? '正在校验…' : checked ? '已校验 · 尚未保存' : '待校验 · 尚未保存' }}
+          {{ saving ? '正在保存…' : saved ? '已保存' : validating ? '正在校验…' : checked ? '已校验 · 尚未保存' : '待校验 · 尚未保存' }}
         </span>
       </div>
 
@@ -95,27 +108,34 @@ function ticketLabel(item: Attraction | undefined): string {
             <textarea :aria-label="`第${day.day}天说明`" :value="day.note ?? ''" maxlength="240" rows="2"
               placeholder="填写当天安排，最多 240 字" @input="setNote(day.day, textValue($event))"></textarea>
           </label>
-          <p v-if="checked" class="subtotal">已知参考门票 ¥{{ checked.days.find(item => item.day === day.day)?.subtotal_cny }}
-            <span v-if="checked.days.find(item => item.day === day.day)?.attractions.some(item => item.ticket_cny === null)"> · 另有门票待确认</span></p>
+          <p v-if="result" class="subtotal">已知参考门票 ¥{{ result.days.find(item => item.day === day.day)?.subtotal_cny }}
+            <span v-if="result.days.find(item => item.day === day.day)?.attractions.some(item => item.ticket_cny === null)"> · 另有门票待确认</span></p>
         </article>
       </div>
 
+      </fieldset>
       <div class="summary" aria-live="polite">
-        <template v-if="checked">
-          <div class="total"><span>{{ checked.has_unknown_prices ? '已知参考门票合计' : '参考门票合计' }}</span>
-            <strong>¥{{ checked.total_cny }}</strong><span :class="{ warning: checked.over_budget !== false }">{{ budgetLabel }}</span></div>
-          <ul class="warnings"><li v-for="message in checked.warnings" :key="message">{{ message }}</li></ul>
+        <template v-if="result">
+          <div class="total"><span>{{ result.has_unknown_prices ? '已知参考门票合计' : '参考门票合计' }}</span>
+            <strong>¥{{ result.total_cny }}</strong><span :class="{ warning: result.over_budget !== false }">{{ budgetLabel }}</span></div>
+          <ul class="warnings"><li v-for="message in result.warnings" :key="message">{{ message }}</li></ul>
         </template>
         <p v-else>当前安排尚未通过校验，门票合计和预算状态将在校验成功后更新。</p>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <ElButton type="primary" :loading="validating" :disabled="validating" @click="validate">重新校验行程</ElButton>
+        <p v-if="saveError" class="error" role="alert">{{ saveError }}</p>
+        <template v-if="!saved">
+          <ElButton :loading="validating" :disabled="saving || validating" @click="validate">重新校验行程</ElButton>
+          <ElButton type="primary" :loading="saving" :disabled="!canSave" @click="confirmSave">确认保存行程</ElButton>
+        </template>
       </div>
-      <p class="boundary">草案暂不支持保存，刷新页面会丢失当前安排。景点资料和门票并非实时信息，费用不包含交通、餐饮和住宿。</p>
+      <p class="boundary">未保存的草案在刷新时会丢失。已保存的行程可在下方历史记录中查看。</p>
     </template>
+    <TripHistory ref="history" @deleted="onDeleted" />
   </section>
 </template>
 
 <style scoped>
+.draft-fields{border:0;margin:0;padding:0;min-width:0}.draft-fields:disabled :is(input,textarea,select,button){opacity:.7}
 .workspace{max-width:1344px;margin:0 auto 48px;padding:30px;box-sizing:border-box;border:1px solid #dbe5f0;border-radius:16px;background:#fff;color:#172e4b}
 .workspace *{box-sizing:border-box}.workspace-head{display:flex;justify-content:space-between;gap:20px;align-items:start}.eyebrow{font-size:12px;font-weight:700;color:#1769dc}h2{margin:8px 0;font-size:24px}.workspace-head p,.boundary{color:#5c7189;font-size:13px;line-height:1.8}.source{border-radius:20px;padding:9px 13px;background:#eaf3ff;color:#2468c3;font-size:12px;white-space:nowrap}.empty{padding:48px 0;text-align:center;color:#5c7189}.toolbar{display:flex;align-items:center;gap:20px;flex-wrap:wrap;border-block:1px solid #e5edf5;padding:18px 0;margin:20px 0}.toolbar label{font-size:13px}.toolbar input{width:110px;margin:0 6px;padding:8px;border:1px solid #cbd9e9;border-radius:6px}.status{margin-left:auto;color:#226d60;font-size:13px}.status.pending{color:#98631b}.days{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.day{border:1px solid #dbe5f0;border-radius:12px;padding:20px;min-width:0}.day>header{display:flex;justify-content:space-between;align-items:center}.day h3{margin:0;font-size:19px}.day>header>span,.day-empty{color:#6c8198;font-size:13px}.day ol{list-style:none;margin:16px 0;padding:0}.day li{padding:14px 0;border-bottom:1px solid #edf2f7}.place-info{display:flex;flex-direction:column;gap:7px}.place-info span,.place-info small{color:#5c7189;font-size:12px}.edit-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}.edit-actions button,.edit-actions select{padding:6px 8px;border:1px solid #d5e1ef;background:white;color:#365e8a;border-radius:6px;font-size:12px}.edit-actions .remove{color:#a33d39}.add-label,.note-label{display:flex;flex-direction:column;gap:8px;font-size:13px;margin-top:16px}.add-label select,.note-label textarea{width:100%;padding:10px;border:1px solid #cbd9e9;border-radius:7px;color:#365e8a;background:white}.note-label textarea{resize:vertical;line-height:1.6}.subtotal{margin-bottom:0;font-size:13px;color:#365e8a}.subtotal span{color:#98631b}.summary{padding:22px;margin-top:22px;border-radius:12px;background:#f3f7fc;line-height:1.7;font-size:14px}.total{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.total strong{font-size:28px;color:#1769dc}.total>span:last-child{color:#226d60}.total>span.warning{color:#98631b}.warnings{padding-left:20px;color:#5c7189;font-size:13px}.error{background:#fff1ee;color:#a33d39;padding:12px;border-radius:8px}.boundary{margin:18px 0 0}
 @media(min-width:1440px){.workspace{max-width:1344px}}

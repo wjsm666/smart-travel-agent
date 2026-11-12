@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.catalog import service as catalog_service
+from app.config import get_settings
 from app.contracts import Attraction, CandidateDay, GenerationRequest, PlanInput
 from app.errors import ValidationError
 from app.itineraries import service as itinerary_service
@@ -11,6 +12,55 @@ from app.itineraries.rules import make_rule_candidate
 from app.itineraries.service import validate_and_enrich
 from app.main import app
 from app.planning import service as planning_service
+
+
+@pytest.fixture
+def trip_file(tmp_path, monkeypatch):
+    path = tmp_path / "trips.json"
+    monkeypatch.setattr(get_settings(), "trips_path", path)
+    return path
+
+
+def test_save_snapshot_and_history_round_trip(catalog, trip_file):
+    payload = draft([["a", "b"]]).model_dump()
+    payload["days"][0]["note"] = "下午游览"
+    with TestClient(app) as client:
+        assert client.get("/api/trips").json() == {"items": []}
+        assert client.post("/api/plans/validate", json=payload).status_code == 200
+        assert not trip_file.exists()
+        response = client.post("/api/trips", json=payload)
+        assert response.status_code == 201
+        saved = response.json()
+        assert saved["status"] == "saved"
+        assert saved["total_cny"] == 20
+        assert saved["over_budget"] is None
+        assert saved["days"][0]["note"] == "下午游览"
+        second = client.post("/api/trips", json=payload).json()
+        assert saved["trip_id"] != second["trip_id"]
+
+    catalog[0].ticket_cny = 99
+    path = f"/api/trips/{saved['trip_id']}"
+    with TestClient(app) as client:
+        assert client.get("/api/trips").json() == {"items": [second, saved]}
+        assert client.get(path).json() == saved
+        removed = client.delete(path)
+        assert removed.status_code == 204 and not removed.content
+        assert client.get(path).json()["code"] == "NOT_FOUND"
+        assert client.delete(path).status_code == 404
+        assert client.get("/api/trips").json() == {"items": [second]}
+
+
+def test_save_revalidates_and_leaves_corrupt_file_intact(catalog, trip_file):
+    with TestClient(app) as client:
+        assert client.post("/api/trips", json=draft([[]]).model_dump()).status_code == 422
+        assert client.post("/api/trips", json=draft([["a", "a"]]).model_dump()).status_code == 422
+        assert not trip_file.exists()
+        original = b"{ incomplete"
+        trip_file.write_bytes(original)
+        assert client.get("/api/trips").json()["code"] == "STORAGE_ERROR"
+        assert client.post("/api/trips", json=draft([["a"]]).model_dump()).status_code == 500
+        assert client.delete("/api/trips/test").status_code == 500
+        assert trip_file.read_bytes() == original
 
 
 @pytest.fixture

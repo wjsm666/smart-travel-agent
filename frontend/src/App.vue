@@ -21,6 +21,7 @@ function receivePlan(plan: PlanView) {
 }
 
 function replaceDraft() {
+  if (workspace.value?.saving) return
   if (pendingDraft.value) draft.value = pendingDraft.value
   replaceOpen.value = false
   pendingDraft.value = null
@@ -41,7 +42,7 @@ function keepDraft() {
       <p>当前草案尚未保存。替换后会丢失当前安排和修改，是否使用新生成的草案？</p>
       <template #footer>
         <ElButton @click="keepDraft">保留当前草案</ElButton>
-        <ElButton type="primary" @click="replaceDraft">替换草案</ElButton>
+        <ElButton type="primary" :disabled="workspace?.saving" @click="replaceDraft">替换草案</ElButton>
       </template>
     </ElDialog>
   </main>

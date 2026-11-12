@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { requestJson } from '../../api/client'
-import type { CandidateDay, PlanInput, PlanView } from '../../types/contracts'
+import type { CandidateDay, PlanInput, PlanView, SavedTrip } from '../../types/contracts'
 
 export function toPlanInput(plan: PlanView): PlanInput {
   return {
@@ -18,6 +18,9 @@ export function useDraftEditor() {
   const checked = shallowRef<PlanView | null>(null)
   const validating = ref(false)
   const error = ref('')
+  const saved = shallowRef<SavedTrip | null>(null)
+  const saving = ref(false)
+  const saveError = ref('')
   let revision = 0
   let activeRequest = 0
   let controller: AbortController | undefined
@@ -28,7 +31,9 @@ export function useDraftEditor() {
     controller?.abort()
     validating.value = false
     checked.value = null
+    saved.value = null
     error.value = ''
+    saveError.value = ''
   }
 
   function load(plan: PlanView | null) {
@@ -93,7 +98,7 @@ export function useDraftEditor() {
   }
 
   async function validate() {
-    if (!input.value || validating.value) return
+    if (!input.value || validating.value || saving.value || saved.value) return
     if (!Number.isInteger(input.value.budget_cny) || input.value.budget_cny < 0) {
       error.value = '门票预算需要填写非负整数。'
       return
@@ -119,9 +124,35 @@ export function useDraftEditor() {
     }
   }
 
+  const canSave = computed(() => !saving.value && !validating.value && !saved.value &&
+    checked.value?.days.some(day => day.attractions.length > 0) === true)
+
+  async function save() {
+    if (!input.value || !canSave.value) return
+    const version = revision
+    saving.value = true
+    saveError.value = ''
+    try {
+      const trip = await requestJson<SavedTrip>('/api/trips', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input.value),
+      })
+      if (version === revision) saved.value = trip
+      return trip
+    } catch (reason) {
+      if (version === revision) {
+        checked.value = null
+        saveError.value = reason instanceof Error ? reason.message : '保存失败，请重试。'
+      }
+    } finally {
+      saving.value = false
+    }
+  }
+
   onScopeDispose(invalidate)
   return {
-    input, checked, validating, error, hasUnsavedChanges: computed(() => input.value !== null),
-    load, add, remove, move, reorder, setNote, setBudget, validate,
+    input, checked, validating, error, saved, saving, saveError, canSave,
+    hasUnsavedChanges: computed(() => input.value !== null && saved.value === null),
+    load, add, remove, move, reorder, setNote, setBudget, validate, save,
   }
 }

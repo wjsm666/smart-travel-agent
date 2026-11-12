@@ -1,8 +1,12 @@
 """Enrich ID-only drafts using the catalog as the source of prices."""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 from app.catalog.service import get_catalog
-from app.contracts import Attraction, PlanDay, PlanInput, PlanView
+from app.contracts import Attraction, PlanDay, PlanInput, PlanView, SavedTrip
 from app.errors import ValidationError
+from app.itineraries.storage import add_trip
 
 
 def fits_day(items: list[Attraction]) -> bool:
@@ -75,3 +79,16 @@ def validate_and_enrich(draft: PlanInput) -> PlanView:
         over_budget=over_budget,
         warnings=warnings,
     )
+
+
+def save_trip(draft: PlanInput) -> SavedTrip:
+    checked = validate_and_enrich(draft)
+    if not any(day.attractions for day in checked.days):
+        raise ValidationError("全空草案不能保存。")
+    trip = SavedTrip(
+        **checked.model_dump(exclude={"status"}),
+        trip_id=str(uuid4()),
+        created_at=datetime.now(UTC).isoformat(),
+    )
+    add_trip(trip)
+    return trip

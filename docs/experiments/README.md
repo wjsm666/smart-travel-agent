@@ -16,7 +16,16 @@ A/B 的开发模块主责见根 README。报告主责交替安排，综合部分
 
 按需创建 `experiment-01/` 至 `experiment-07/`，保留模型源文件、可读导出图和报告。不要在尚未完成时提交假截图或把空目录当成果。个人信息按提交用途处理，不将不必要的学号、姓名和教师签名放进公开仓库。
 
-实验八 SVN 是指导书另列练习，按教师安排单独处理，不擅自并入前七次。当前文档建立不代表任何一次课程报告已经完成。
+实验八 SVN 是指导书另列练习，按教师安排单独处理。
+
+## 实验二和实验三
+
+| 实验 | 报告 | 可编辑模型 | 图件 |
+| --- | --- | --- | --- |
+| 二　UML 用例图及用例叙述 | [Word 报告](experiment-02/软件工程实验二报告.docx) | [Travel-Use-Cases.uml](experiment-02/Travel-Use-Cases.uml) | [景点与规划](experiment-02/figure-2-1.png) · [资料维护](experiment-02/figure-2-2.png) · [调整与历史](experiment-02/figure-2-3.png) |
+| 三　UML 类图 | [Word 报告](experiment-03/软件工程实验三报告.docx) | [Itinerary-Class-Model.uml](experiment-03/Itinerary-Class-Model.uml) | [输入、草案与快照](experiment-03/figure-3-1.png) · [行程管理服务](experiment-03/figure-3-2.png) |
+
+两份模型采用 StarUML 旧版 XPD 项目格式。支持 StarUML 1 导入的版本可通过文件菜单导入 `.uml`。实验二由 A 根据项目契约整理本次报告并补充行程分支。实验三将分析类映射到 A 的实际代码和 B 的共享接口。仓库报告封面保留个人信息填写栏，双方互审待记录。
 
 ## 实验一当前安排
 

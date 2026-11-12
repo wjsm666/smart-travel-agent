@@ -40,7 +40,7 @@ docs/experiments/                  按实验主责整理
 
 ## 3. 后端内部交接
 
-以下服务签名已接通，模型结构以 `api.md` 为准。行程路由当前只提供校验，保存管理尚未实现。除 Agent 入口外均可为普通同步函数。
+以下服务签名已接通，模型结构以 `api.md` 为准。除 Agent 入口外均可为普通同步函数。
 
 | 提供者 | 模块出口 | 使用者与责任 |
 | --- | --- | --- |
@@ -50,7 +50,8 @@ docs/experiments/                  按实验主责整理
 | A | `app.itineraries.service.validate_and_enrich(draft: PlanInput) -> PlanView` | 普通编辑、规则/Agent 结果和保存共同使用；不写文件 |
 | A | `app.itineraries.rules.make_rule_candidate(request: GenerationRequest) -> PlanInput` | B 的规则模式入口使用；生成确定草案，不写文件 |
 | B | `app.planning.agent.generate_candidate(request: GenerationRequest) -> AgentCandidate` | 内部可异步；返回分日 ID 和可选说明，B 合并原请求后调用 A 的统一校验 |
-| A | `app.itineraries.router.router` | 应用入口已注册校验路由；保存、列表、详情、删除待实现 |
+| A | `app.itineraries.router.router` | 提供校验、保存、列表、详情和删除 |
+| A | `app.itineraries.storage` | 对快照文件加锁读改写并原子替换，读取历史时直接返回存档内容 |
 
 `GET /api/attractions`、`GET /api/health` 和 `POST /api/plans/generate` 由 B 提供；其他行程接口由 A 提供。B 的生成入口把两种模式的候选都交给 A 校验：用户输入非法为 422，Agent 候选非法转换成 502，不直接返回原始模型结果。
 
@@ -66,7 +67,7 @@ docs/experiments/                  按实验主责整理
 
 行程模块提供 `TripWorkspace.vue`，A 维护。props 为 `draft: PlanView | null`、`attractions: Attraction[]`；内部完成编辑、校验和保存请求、历史列表与删除。父页面收到新草案时，若有未保存编辑，提示用户确认替换，避免覆盖。
 
-当前实现到草案编辑和重新校验，未实现上述保存/历史/删除目标。`TripWorkspace` 暴露只读的 `hasUnsavedChanges` 给父页面；当前所有草案均未保存，接收新生成草案前需确认替换。编辑状态在 `useDraftEditor.ts` 中维护，每次修改立即清除旧费用汇总、使旧校验请求失效；只应用当前版本的成功或失败响应。每日增删、移动或重排景点后清除受影响日的旧说明，费用和业务限制仍交后端统一校验。
+`TripWorkspace` 向父页面暴露只读的未保存状态和保存中状态。`useDraftEditor.ts` 管理编辑及校验版本，每次修改清除旧费用汇总，使旧校验请求失效。每日增删、移动或重排景点后清除受影响日的旧说明，费用和业务限制交后端统一校验。保存期间暂停替换和编辑，`TripHistory.vue` 在保存后刷新列表并按需读取或删除快照。
 
 同一新草案对象以新的引用传入。行程模块复制为本地编辑状态，不直接修改 props；调用 `PlanInput` 接口时从每日 `attractions` 提取 ID。编辑响应只应用于对应草案版本，过期响应丢弃或取消请求。
 

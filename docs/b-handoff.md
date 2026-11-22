@@ -1,29 +1,45 @@
 # B 模块对接说明
 
-本次集成进度：已有规则与统一校验服务继续复用，A 已初始化前端工程并接入 B 的组件事件，完成草案编辑和重新校验。B 源码、原提交及作者保持不变；保存管理仍待完成。见 [当前交付说明](member-a-half.md) 和 [前期框架说明](member-one-framework.md)。
+规则推荐和 AI 推荐共用统一校验。A 已接入 B 的组件事件，规则行程可生成、编辑、重新校验、保存、查看历史和删除。阶段验收记录见 [验收清单](acceptance.md)。
 
 ## 已实现的部分
 
 - 后端 Python 3.13 / FastAPI 工程、依赖锁文件、公共 Pydantic 模型、配置、统一错误及健康检查。
 - 汕头真实景点的人工参考资料，`list_attractions`、`get_catalog` 和景点查询接口；资料非实时、部分门票待确认。
 - 规划入口与单 Agent：一个只读查询工具，每次最多一次工具调用、两次模型调用；超时、非法输出和服务错误按契约返回。
-- 前端 `PlanningPanel.vue`：旅游需求、景点搜索和筛选、生成请求与结果事件。
+- 前端 `PlanningPanel.vue`：旅游需求、景点搜索与筛选、景点和参考票价来源、两种生成入口及草案交接。
 
-后端已做离线自动化测试，Agent 工具循环使用替身模型；没有真实模型调用记录。A 主工程的类型检查、构建及组件事件对接测试已通过，另以真实本机 HTTP 验证 Vite 代理到规则生成与重新校验；这仍不代表保存闭环或真实 Agent 已验收。
+后端自动化测试覆盖 Agent 的工具调用、超时和输出校验。本地模拟兼容接口的浏览器验收已通过，观察到两次模型请求和一次景点查询结果，并走通 AI 草案的编辑、校验、保存和历史查看。真实服务的联调结果另行记录。
 
 ## A 的工作和交接点
 
-1. **后端**：实现 `app.itineraries.rules.make_rule_candidate(request)`、`app.itineraries.service.validate_and_enrich(draft)`，以及 `app.itineraries.router.router`。完整签名和输入/输出见 [架构约定](architecture.md)、[接口契约](api.md)。B 的入口会使用 A 的函数，不在 B 模块重复计算费用。
+1. **后端**：B 调用 A 已提供的 `make_rule_candidate(request)` 和 `validate_and_enrich(draft)`。生成、编辑和保存中的费用由统一校验服务计算。完整签名和字段见 [架构约定](architecture.md)、[接口契约](api.md)。
 2. **前端（已接入）**：Vue 工程、`src/types/contracts.ts` 和 `src/api/client.ts` 已提供；公共客户端保持 `requestJson<T>(path: string, init?: RequestInit): Promise<T>`。`App.vue` 引入 B 的 `PlanningPanel.vue`，接收 `catalog-loaded`（完整景点数组）和 `plan-generated`（标准草案），传给 A 的 `TripWorkspace.vue`；新草案替换前确认，取消保留当前修改。
-3. 当前入口已注册 A 的校验路由，两种生成模式均使用统一校验；缺少行程服务时的 `SERVICE_NOT_READY` 是此前交接阶段的保护分支。保存、历史与删除接口尚未实现。
-4. B 的隔离前端检查使用 Vue 3.5.44、Element Plus 2.14.7、Vite 8.3.5、`vue-tsc` 3.3.14、TypeScript 5.9.3。A 主工程沿用并锁定该组合，类型检查和构建通过；不使用此前不兼容的 TypeScript 7.0.2 组合。
+3. A 的路由已支持草案校验、确认保存、历史列表、详情和删除。规则与 AI 返回相同的 `PlanView`，历史详情使用保存时的快照。
+4. 规划页在生成成功后提供 **前往行程工作区**，定位到现有的 `#trip-workspace`。有旧草案时，仍由应用入口决定是否替换。前端依赖以现有锁文件为准。
 
-**汕头方案的契约变更：** `Attraction.ticket_cny` 可以为 `null`，新增 `area`、`duration_min` 与资料来源；`CandidateDay` 和 `PlanDay` 新增可选 `note`；`PlanView`/`SavedTrip` 新增 `has_unknown_prices`，`over_budget` 可以为 `null`。A 需要在类型、校验、费用、显示和快照中处理这些字段；详见 [接口契约](api.md)。已知费用未超预算且有未知价格时，不能判定预算满足。每日景点安排也需检查 BR13 的时长与南澳区域规则。
+**行程模块继续沿用的字段**包括景点的 `area`、`duration_min`、资料来源，分日 `note` 以及 `has_unknown_prices`。`ticket_cny` 为 `null` 时显示票价待确认。工具和界面使用相同的本地景点数据，已知费用与预算判断由统一校验服务返回，详见 [接口契约](api.md)。
 
-A 不需要为 B 再实现景点数据、公共 Pydantic 模型或 Agent。B 不在生产代码中提供 A 的行程服务替身，单元测试中的替身仅用于检查接口衔接。
+## 无需模型的验收
 
-## 后续联调
+按 [README 启动说明](../README.md#开始开发) 启动前后端，用规则模式检查对接。真实模型配置可以稍后再做。
 
-- 先核对实际分支和双方改动，再合入代码；运行后端测试及 A 的前端检查，验证规则生成、编辑、保存和删除。
-- 用户自行在本地 `backend/.env` 或环境变量中提供 `LLM_MODEL`、`LLM_API_KEY`，必要时提供 OpenAI 兼容的 `LLM_BASE_URL`。请勿把真实密钥发到仓库或提交到版本控制。
-- 有实际可用的支持工具调用的模型服务后，再验证真实工具查询、候选校验和超时。离线测试与真实模型联调分别记录。
+1. 搜索「小公园」，确认命中景点并可看到资料来源。有票价依据时显示票价来源，未知票价显示待确认。
+2. 选择 2 天、人文和 200 元，点击 **使用规则推荐**。生成成功后点击 **前往行程工作区**，查看分日安排与费用提示。
+3. 修改一天的说明，重新校验并确认保存。刷新后打开历史详情，核对本次修改。删除记录后，历史中不再出现该记录。
+
+2026-11-22 本地验证了来源链接、未知票价、搜索空结果和工作区跳转，并走通规则行程的编辑、校验、保存、历史详情和删除。前端类型检查及构建通过。
+
+## 真实模型验收
+
+在本地 `backend/.env` 中填写支持工具调用的模型名 `LLM_MODEL`、`LLM_API_KEY` 和第三方服务的 OpenAI 兼容 `LLM_BASE_URL`。OpenAI 官方服务可留空地址。`.env` 只在本机使用。
+
+在 `backend` 目录运行一次生成。该命令只生成草案。
+
+```powershell
+uv run --locked python -m app.planning --mode agent --days 2 --budget 200 --preference 人文
+```
+
+验收时检查返回的 `mode` 为 `agent`，`status` 为 `draft`，两天都存在且至少有一个景点。Agent 路径要求成功完成一次只读景点查询，候选只使用该次查询返回的 ID，随后再通过统一校验。出现配置、超时或无效草案错误时，按返回错误排查。
+
+按 [README 启动说明](../README.md#开始开发) 启动前后端。页面选 2 天、人文、200 元，点击 **AI 生成行程**，检查草案标注为 AI 推荐。修改一天的说明，重新校验并确认保存，刷新后从历史详情确认修改已保存。AI 失败时，用户可以主动点击 **使用规则推荐**。

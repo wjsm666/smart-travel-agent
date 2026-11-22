@@ -1,4 +1,4 @@
-"""Read and filter the local, intentionally fictional attraction catalog."""
+"""Read and filter the local catalog of Shantou attraction references."""
 
 import json
 

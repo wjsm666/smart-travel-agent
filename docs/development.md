@@ -63,4 +63,4 @@
 
 1. A 已初始化前端工程、`contracts.ts` 与 `api/client.ts`，在 `App.vue` 接入规划组件的两个约定事件。`requestJson<T>(path, init?)` 签名和事件内容仍按 `architecture.md`。
 2. 生成接口复用 `app.itineraries.rules.make_rule_candidate` 和 `app.itineraries.service.validate_and_enrich`。A 已在行程路由提供校验、保存、列表、详情和删除。
-3. A 主工程沿用 B 已验证的 Vue、Element Plus、Vite、`vue-tsc` 与 TypeScript 5.9.3 组合并提交锁文件；完整前端类型检查和构建已通过。B 的规划组件源码保持不变；真实 Agent 联调仍由 B 后续记录。
+3. 规划页现已展示景点和参考票价来源，生成成功后可跳转到行程工作区。用规则模式即可继续调试 A 的功能，步骤见 [B 模块对接说明](b-handoff.md)。

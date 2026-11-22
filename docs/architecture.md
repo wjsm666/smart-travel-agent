@@ -4,7 +4,7 @@
 
 Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 封装 HTTP；Python 3.13、FastAPI、Pydantic 2 构成后端。LangChain `create_agent` 用于一个小型规划助手，模型适配依赖由 B 根据实际可用服务验证后添加。它替代手写 LangGraph 编排；不增加第二个 Agent 框架。
 
-前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 各自维护已验证的兼容版本和锁文件。前端声明 Node >=22.12.0，实际验证 Node 24.16.0、pnpm 11.25.0。B 的后端已初始化，A 的规则与校验服务、前端主工程和草案编辑已接入；保存管理待做。
+前端使用 `pnpm`，后端使用 `uv`，沿用原方案的包管理方向。A/B 各自维护已验证的兼容版本和锁文件。前端声明 Node >=22.12.0，实际验证 Node 24.16.0、pnpm 11.25.0。规划页已接入统一校验和行程管理。规则模式支持生成、编辑、保存、查看历史和删除，真实模型联调待完成。
 
 本版数据为 UTF-8 JSON，PostgreSQL、SQLAlchemy、Alembic、Pinia、Docker、CI 暂不启用；不另换语言、UI 框架或数据库。
 
@@ -12,7 +12,7 @@ Vue 3、TypeScript、Vite、Element Plus 构成前端，使用浏览器 `fetch` 
 
 ## 2. 目标目录和负责人
 
-以下为目标结构；B 的景点和规划部分已开发，A 的规则、统一校验和校验路由、前端入口和草案编辑已接入。保存管理仍是后续目标。不要提交无意义空模块。
+以下目录按模块职责组织。A 负责规则生成、草案校验和历史管理。B 负责景点目录、规划入口和 AI 推荐。
 
 ```text
 frontend/                          A 初始化工程与依赖

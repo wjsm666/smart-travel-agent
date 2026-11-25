@@ -83,10 +83,10 @@ describe('草案版本和约定字段', () => {
     await oldRequest
     expect(state.checked.value).toBeNull()
     expect(state.error.value).toBe('')
-    expect(state.validating.value).toBe(true)
+    expect(state.phase.value).toBe('validating')
     current.resolve(draft())
     await newRequest
-    expect(state.validating.value).toBe(false)
+    expect(state.phase.value).toBe('checked')
     expect(state.checked.value).not.toBeNull()
   })
 

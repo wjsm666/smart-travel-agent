@@ -78,7 +78,7 @@ async function loadCatalog() {
   }
 }
 async function generate(mode: GenerationRequest['mode']) {
-  if (generating.value) return
+  if (generating.value || catalogLoading.value || !attractions.value.length) return
   generationError.value = ''
   if (!Number.isInteger(form.day_count) || form.day_count < 1 || form.day_count > 5) {
     generationError.value = '请选择 1 至 5 天的行程。'

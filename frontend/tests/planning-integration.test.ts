@@ -97,3 +97,17 @@ it('AI 请求期间禁止重复生成，失败如实提示，规则推荐需用�
   await flushPromises()
   expect(wrapper.emitted('plan-generated')).toEqual([[draft()]])
 })
+
+it('景点资料未就绪时，表单提交不能绕过生成按钮的限制', async () => {
+  const catalog = deferred<{ items: ReturnType<typeof attraction>[] }>()
+  vi.mocked(requestJson).mockReturnValueOnce(catalog.promise)
+  const wrapper = mount(PlanningPanel)
+  wrappers.push(wrapper)
+  await wrapper.get('#planning-form').trigger('submit')
+  expect(vi.mocked(requestJson).mock.calls.map(([path]) => path)).toEqual(['/api/attractions?city=汕头'])
+  catalog.resolve({ items: [] })
+  await flushPromises()
+  await wrapper.get('#planning-form').trigger('submit')
+  expect(requestJson).toHaveBeenCalledTimes(1)
+  expect(wrapper.emitted('plan-generated')).toBeUndefined()
+})

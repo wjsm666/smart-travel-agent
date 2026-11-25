@@ -7,10 +7,23 @@ import { useDraftEditor } from './useDraftEditor'
 import TripHistory from './TripHistory.vue'
 
 const props = defineProps<{ draft: PlanView | null; attractions: Attraction[] }>()
+const emit = defineEmits<{ 'draft-cleared': [] }>()
 const {
-  input, checked, validating, error, hasUnsavedChanges, saved, saving, saveError, canSave,
+  phase, input, checked, error, hasUnsavedChanges, saved, canSave,
   load, add, remove, move, reorder, setNote, setBudget, validate, save,
 } = useDraftEditor()
+const saving = computed(() => phase.value === 'saving')
+const validating = computed(() => phase.value === 'validating')
+const statusLabels = {
+  empty: '',
+  pending: '待校验 · 尚未保存',
+  validating: '正在校验…',
+  validationFailed: '校验未通过 · 尚未保存',
+  checked: '已校验 · 尚未保存',
+  saving: '正在保存…',
+  saveFailed: '保存失败 · 待重新校验',
+  saved: '已保存',
+}
 const history = ref<InstanceType<typeof TripHistory> | null>(null)
 watch(() => props.draft, load, { immediate: true })
 defineExpose({ hasUnsavedChanges, saving })
@@ -20,18 +33,29 @@ async function confirmSave() {
   if (await save()) void history.value?.refresh()
 }
 
-function onDeleted(tripId: string) {
-  if (saved.value?.trip_id === tripId) load(null)
+function clearDraft() {
+  load(null)
+  emit('draft-cleared')
 }
 
+function discardDraft() {
+  if (!hasUnsavedChanges.value || saving.value || !window.confirm('确定放弃当前未保存的行程草案？')) return
+  clearDraft()
+}
+
+function onDeleted(tripId: string) {
+  if (saved.value?.trip_id === tripId) clearDraft()
+}
+
+const result = computed(() => saved.value ?? checked.value)
 // Fall back to the generated snapshots if the catalog is temporarily unavailable.
 const catalog = computed(() => new Map([
   ...(props.draft?.days.flatMap(day => day.attractions) ?? []), ...props.attractions,
+  ...(result.value?.days.flatMap(day => day.attractions) ?? []),
 ].map(item => [item.id, item])))
 const usedIds = computed(() => new Set(input.value?.days.flatMap(day => day.attraction_ids) ?? []))
 const available = computed(() => [...catalog.value.values()]
   .filter(item => item.city === input.value?.city && !usedIds.value.has(item.id)))
-const result = computed(() => saved.value ?? checked.value)
 const budgetLabel = computed(() => result.value?.over_budget === true ? '已知门票超出预算'
   : result.value?.over_budget === null ? '预算待确认' : '已知门票在预算内')
 
@@ -67,8 +91,8 @@ function ticketLabel(item: Attraction | undefined): string {
         <span>{{ input.city }} · {{ input.day_count }} 天</span>
         <label>门票预算 <input aria-label="草案门票预算" type="number" min="0" step="1"
           :value="input.budget_cny" @input="setBudget(textValue($event).trim() ? Number(textValue($event)) : NaN)"> 元 / 人</label>
-        <span class="status" :class="{ pending: !checked }" role="status">
-          {{ saving ? '正在保存…' : saved ? '已保存' : validating ? '正在校验…' : checked ? '已校验 · 尚未保存' : '待校验 · 尚未保存' }}
+        <span class="status" :class="{ pending: !checked && !saved }" role="status">
+          {{ statusLabels[phase] }}
         </span>
       </div>
 
@@ -122,10 +146,10 @@ function ticketLabel(item: Attraction | undefined): string {
         </template>
         <p v-else>当前安排尚未通过校验，门票合计和预算状态将在校验成功后更新。</p>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <p v-if="saveError" class="error" role="alert">{{ saveError }}</p>
         <template v-if="!saved">
           <ElButton :loading="validating" :disabled="saving || validating" @click="validate">重新校验行程</ElButton>
           <ElButton type="primary" :loading="saving" :disabled="!canSave" @click="confirmSave">确认保存行程</ElButton>
+          <ElButton :disabled="saving" @click="discardDraft">放弃草案</ElButton>
         </template>
       </div>
       <p class="boundary">未保存的草案在刷新时会丢失。已保存的行程可在下方历史记录中查看。</p>
